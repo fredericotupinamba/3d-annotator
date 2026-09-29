@@ -41,6 +41,15 @@ Currently, our primary focus is on semantic segmentation. However, the tool’s 
   - [Default accounts (sample data)](#default-accounts-sample-data)
   - [Troubleshooting](#troubleshooting)
   - [Alternative: Docker deployment](#alternative-docker-deployment)
+    - [How the pieces fit together](#how-the-pieces-fit-together)
+    - [1. Prerequisites](#1-prerequisites)
+    - [2. Build the two images](#2-build-the-two-images)
+    - [3. Create deployment/.env](#3-create-deploymentenv)
+    - [4. Add the TLS certificate](#4-add-the-tls-certificate)
+    - [5. Point the domain at this machine](#5-point-the-domain-at-this-machine)
+    - [6. Start the stack](#6-start-the-stack)
+    - [Updating / redeploying](#updating--redeploying)
+    - [Docker troubleshooting](#docker-troubleshooting)
 - [Technical details](#technical-details)
 - [Dataset references](#dataset-references)
 - [Future plans](#future-plans)
@@ -142,7 +151,130 @@ Sample data is defined in [`backend/annotator/backend/sample_data/sampleData.py`
 
 ## Alternative: Docker deployment
 
-Docker files for both the backend (API) and frontend (static file server), plus a Traefik-based `docker-compose` setup, are provided in [`deployment/`](./deployment/). This is closer to a production setup (it expects a domain and HTTPS) and is not required for local development — use it only if you specifically want a containerized/production-style deployment.
+The [`deployment/`](./deployment/) folder contains a production-style setup: two Docker images (backend + frontend) sitting behind [Traefik](https://traefik.io/) as a reverse proxy that terminates HTTPS. It **requires a domain name and a TLS certificate** — some browser features this app relies on only work in a secure context. It is not needed for local development; use the [dev server setup](#how-to-install-and-run) above for that instead.
+
+### How the pieces fit together
+
+- **`traefik`** — the only container exposed to the internet (ports 80/443). Port 80 redirects to 443. It reads `ANNOTATOR_DEPLOYMENT_DOMAIN` from each container's labels to decide where to route a request.
+- **`api`** — the Django backend, served by gunicorn. Handles everything under `/api/*`, except the one path below.
+- **`static`** — an nginx server that serves the built frontend (the SPA) for every other path, **and** serves `/api/static` (Django's collected static files, e.g. for the admin panel) directly from a volume shared with the `api` container.
+
+All three containers are defined in [`deployment/docker-compose.yml`](./deployment/docker-compose.yml). Note that it references images by name (`image:`, not `build:`) — you build them yourself first (step 2 below), it doesn't build them for you.
+
+### 1. Prerequisites
+
+- Docker and Docker Compose (`docker compose version`)
+- A domain name pointing at the machine you're deploying to — or, for local testing only, an entry in your `hosts` file pointing a made-up domain at `127.0.0.1` (see step 5)
+- A TLS certificate + private key for that domain (e.g. from [Let's Encrypt](https://letsencrypt.org/)/`certbot`, or a self-signed one for local testing)
+
+### 2. Build the two images
+
+Both Dockerfiles are written to be built **from the repository root** (not from `deployment/`), since they need access to both `backend/` and `frontend/`:
+
+```bash
+# from the repository root
+docker build -f deployment/api/Dockerfile -t 3d-annotator-api:latest .
+
+docker build -f deployment/static/Dockerfile \
+  --build-arg API_BASE=https://YOUR_DOMAIN/api \
+  --build-arg TITLE="3D-Annotator" \
+  -t 3d-annotator-static:latest .
+```
+
+⚠️ `API_BASE` is baked into the frontend at **build time** (it's a Vite env var resolved during `pnpm build` inside the image) — it must already be your real domain, and you'll need to rebuild the `static` image if it ever changes.
+
+### 3. Create `deployment/.env`
+
+Docker Compose automatically loads a `.env` file from its working directory. Create `deployment/.env` (it's git-ignored) with:
+
+```dotenv
+# the image tags you built in step 2
+ANNOTATOR_IMAGE_NAME_FULL_API=3d-annotator-api
+ANNOTATOR_IMAGE_NAME_FULL_STATIC=3d-annotator-static
+
+# your domain (must match the certificate and API_BASE from step 2)
+ANNOTATOR_DEPLOYMENT_DOMAIN=YOUR_DOMAIN
+
+# Django
+ANNOTATOR_BACKEND_DEBUG=false
+ANNOTATOR_BACKEND_SECRET_KEY=replace-with-a-long-random-string
+ANNOTATOR_BACKEND_ALLOWED_HOSTS=YOUR_DOMAIN
+ANNOTATOR_BACKEND_CSRF_TRUSTED_ORIGINS=https://YOUR_DOMAIN
+ANNOTATOR_BACKEND_TOKEN_PER_USER=1
+ANNOTATOR_BACKEND_MAX_FILE_SIZE=1
+
+# initial Django admin account, created on first start
+ANNOTATOR_BACKEND_SU_NAME=admin
+ANNOTATOR_BACKEND_SU_EMAIL=admin@example.com
+ANNOTATOR_BACKEND_SU_PASSWORD=replace-with-a-strong-password
+
+# gunicorn
+ANNOTATOR_BACKEND_TIMEOUT=1800
+ANNOTATOR_BACKEND_NUM_WORKERS=1
+
+# host UID/GID that should own files written to ./api (static/media/db),
+# so they aren't owned by root — on Linux/macOS run `id -u` and `id -g`
+ANNOTATOR_BACKEND_UID=1000
+ANNOTATOR_BACKEND_GID=1000
+```
+
+Generate a real secret key with e.g. `python -c "import secrets; print(secrets.token_urlsafe(50))"`.
+
+### 4. Add the TLS certificate
+
+Docker Compose mounts `deployment/certs/` (git-ignored) into the Traefik container as `/certs`. Put your certificate and key there, then point to them in [`deployment/traefik/dynamic.yml`](./deployment/traefik/dynamic.yml):
+
+```yaml
+tls:
+  certificates:
+    - certFile: /certs/your-cert.pem
+      keyFile: /certs/your-key.pem
+```
+
+**Just testing locally?** Generate a self-signed certificate instead (browsers will show a security warning, which is expected):
+
+```bash
+mkdir -p deployment/certs
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout deployment/certs/local-key.pem \
+  -out deployment/certs/local-cert.pem \
+  -subj "/CN=YOUR_DOMAIN"
+```
+
+### 5. Point the domain at this machine
+
+For a real server, create a DNS `A` record for your domain pointing at its public IP. For local-only testing, add a line to your hosts file instead (`/etc/hosts` on macOS/Linux, `C:\Windows\System32\drivers\etc\hosts` on Windows, needs admin rights to edit):
+
+```
+127.0.0.1 YOUR_DOMAIN
+```
+
+### 6. Start the stack
+
+```bash
+cd deployment
+docker compose up -d
+docker compose logs -f   # watch startup, Ctrl+C to stop watching (containers keep running)
+```
+
+Open `https://YOUR_DOMAIN` in your browser and log in with `ANNOTATOR_BACKEND_SU_NAME` / `ANNOTATOR_BACKEND_SU_PASSWORD` from your `.env`.
+
+### Updating / redeploying
+
+After pulling new code, rebuild the image(s) that changed (step 2) and recreate the containers:
+
+```bash
+cd deployment
+docker compose up -d
+```
+
+Compose only recreates containers whose image actually changed, so this is safe to run after every rebuild. Django migrations and `collectstatic` run automatically on every `api` container start (see [`deployment/api/entrypoint.sh`](./deployment/api/entrypoint.sh)).
+
+### Docker troubleshooting
+
+- **Compose can't find the image / tries to pull from Docker Hub**: the image name in `.env` must exactly match the `-t` tag you used in `docker build` (step 2). Compose only builds nothing itself here — always build first.
+- **Superuser creation logs an error on every restart**: expected once an admin user already exists (`createsuperuser --noinput` refuses to create a duplicate) — harmless, gunicorn still starts right after.
+- **Browser refuses to load the page / mixed content errors**: double-check `API_BASE` (step 2) and `ANNOTATOR_BACKEND_CSRF_TRUSTED_ORIGINS` (step 3) both use `https://` and the exact same domain as the certificate.
 
 # Features
 
