@@ -47,7 +47,7 @@ export function disposeMaterials(materials: Material | Material[] | undefined) {
  * Creates a new BufferGeometry out of a structured clone of a BufferGeometry.
  *
  * ! Uses shallow copies !
- * ! Only copies attributes !
+ * ! Only copies attributes and userData !
  *
  * @param structuredClone a structured clone of a BufferGeometry
  * @returns a new BufferGeometry
@@ -71,6 +71,7 @@ export function createGeometryFromClone(
 		);
 		geometry.setAttribute(key, newAttr);
 	}
+	geometry.userData = structuredClone.userData ?? {};
 	return geometry;
 }
 

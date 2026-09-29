@@ -13,7 +13,7 @@ import { BaseVisualizer, VISUALIZER_SETTINGS } from "./AnnotationVisualizer";
  */
 export class PointCloudAnnotationVisualizer extends BaseVisualizer {
 	private readonly scene: Scene<PointCloud>;
-	private readonly originalColors: Float32Array;
+	private originalColors: Float32Array;
 
 	/**
 	 * Constructs a new instance of {@link PointCloudAnnotationVisualizer}
@@ -28,6 +28,18 @@ export class PointCloudAnnotationVisualizer extends BaseVisualizer {
 			"color"
 		) as BufferAttribute;
 		this.originalColors = Float32Array.from(colorAttribute.array);
+	}
+
+	/**
+	 * Replaces the base colors that annotation labels are blended on top of
+	 * (e.g. to visualize a scalar field instead of the point cloud's
+	 * original colors). Does not redraw by itself, call `visualizeAll`
+	 * afterwards.
+	 *
+	 * @param colors the new base colors, as a flat RGB `Float32Array`
+	 */
+	public setBaseColors(colors: Float32Array): void {
+		this.originalColors = colors;
 	}
 
 	public visualize({ label, data }: LabeledAnnotationData) {

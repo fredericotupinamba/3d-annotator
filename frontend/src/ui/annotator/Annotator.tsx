@@ -14,6 +14,7 @@ import { LightingSettings } from "./components/LightingSettings";
 import { LoadingState } from "./components/LoadingState";
 import { ModelName } from "./components/ModelName";
 import { PointSettings } from "./components/PointSettings";
+import { ScalarFieldSettings } from "./components/ScalarFieldSettings";
 import { Stats } from "./components/Stats";
 import { AnnotatorProvider } from "./contexts/AnnotatorContext";
 import { useCursor } from "./hooks/Cursor";
@@ -65,6 +66,7 @@ function AnnotatorComponent() {
 					<CameraSettings />
 					<LightingSettings />
 					<PointSettings />
+					<ScalarFieldSettings />
 				</div>
 
 				<div className="absolute left-1/2 top-20 -translate-x-1/2 transform">

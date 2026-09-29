@@ -205,6 +205,12 @@ const de: Translation = {
 	POINTS: "Punkte",
 	POINT_SIZE: "Punktgröße",
 	OPACITY: "Deckkraft",
+	NONE: "Keine",
+	SCALAR_FIELDS: "Skalarfelder",
+	COLOR_BY_SCALAR_FIELD: "Einfärben nach",
+	FILTER_BY_SCALAR_FIELD: "Filter",
+	ADD_FILTER: "Filter hinzufügen",
+	SELECT_FIELD: "Feld auswählen",
 	FILL_TOOLTIP:
 		"Alles, was nicht gesperrt sind, mit der aktuellen Farbe annotieren",
 

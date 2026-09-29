@@ -201,6 +201,12 @@ const en: BaseTranslation = {
 	POINTS: "Points",
 	POINT_SIZE: "Point size",
 	OPACITY: "Opacity",
+	NONE: "None",
+	SCALAR_FIELDS: "Scalar fields",
+	COLOR_BY_SCALAR_FIELD: "Color by",
+	FILTER_BY_SCALAR_FIELD: "Filters",
+	ADD_FILTER: "Add filter",
+	SELECT_FIELD: "Select field",
 	FILL_TOOLTIP:
 		"Annotate everything that is not locked, with the current color",
 
