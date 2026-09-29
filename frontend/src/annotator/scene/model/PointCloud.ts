@@ -13,6 +13,7 @@ import {
 } from "~annotator/scalarFields/ScalarFieldColorMap";
 import type { CacheScope } from "~cache/index";
 import type {
+	CoordinateShift,
 	ScalarFieldFilter,
 	ScalarFieldInfo,
 	ScalarFieldKind,
@@ -49,6 +50,21 @@ interface FilterSlotUniforms {
 	mode: { value: number };
 	min: { value: number };
 	max: { value: number };
+}
+
+/**
+ * The raw per-point data needed to export this point cloud to an external
+ * format (e.g. LAS), alongside the annotation data.
+ */
+export interface PointCloudExportData {
+	/** interleaved x,y,z, in the model's local (viewer) coordinates */
+	positions: Float32Array;
+	/** added to `positions` to recover the original real-world coordinates */
+	coordinateShift: CoordinateShift;
+	/** interleaved r,g,b in [0, 1], or `null` if the source file had no color */
+	colors: Float32Array | null;
+	/** the raw values of every scalar field discovered in the source file */
+	scalarFields: { name: string; values: Float32Array }[];
 }
 
 export const POINT_CLOUD_SETTINGS = {
@@ -202,6 +218,37 @@ export class PointCloud implements Model {
 		return kind === "categorical" && field.uniqueValues
 			? computeCategoricalColors(values, field.uniqueValues)
 			: computeContinuousColors(values, field.min, field.max);
+	}
+
+	/**
+	 * Returns the raw per-point data needed to export this point cloud
+	 * (e.g. to LAS), including original coordinates (with the viewer's
+	 * precision-fix shift reversed), original colors and all scalar fields.
+	 */
+	public getExportData(): PointCloudExportData {
+		const geometry = this.getPoints().geometry;
+
+		const positions = (geometry.getAttribute("position") as BufferAttribute)
+			.array as Float32Array;
+
+		const coordinateShift = (geometry.userData.coordinateShift as
+			| CoordinateShift
+			| undefined) ?? { x: 0, y: 0, z: 0 };
+
+		const colors =
+			geometry.userData.hasOriginalColor === true
+				? ((geometry.getAttribute("color") as BufferAttribute)
+						.array as Float32Array)
+				: null;
+
+		const scalarFields = this.getScalarFields().map((field) => ({
+			name: field.name,
+			values: (
+				geometry.getAttribute(field.attributeKey) as BufferAttribute
+			).array as Float32Array,
+		}));
+
+		return { positions, coordinateShift, colors, scalarFields };
 	}
 
 	/**

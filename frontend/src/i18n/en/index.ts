@@ -207,6 +207,9 @@ const en: BaseTranslation = {
 	FILTER_BY_SCALAR_FIELD: "Filters",
 	ADD_FILTER: "Add filter",
 	SELECT_FIELD: "Select field",
+	EDIT_SCALAR_FIELD: "Edit field",
+	NEW_VALUE_PLACEHOLDER: "New integer value",
+	ADD_VALUE: "Add value",
 	FILL_TOOLTIP:
 		"Annotate everything that is not locked, with the current color",
 
@@ -309,6 +312,10 @@ const en: BaseTranslation = {
 	UTF8_SUBHEADING: "UTF-8",
 	UTF8_DESCRIPTION:
 		"Export the current annotation in the UTF-8 Anno3d file format.",
+	POINT_CLOUD_EXPORT_HEADING: "Point Cloud",
+	LAS_SUBHEADING: "LAS",
+	LAS_DESCRIPTION:
+		"Export the point cloud as a .las file, with your segmented classes written to the Classification field. Original coordinates, colors and any scalar fields from the source file (e.g. intensity, tree_id) are preserved.",
 	TEXTURE_HEADING: "Texture",
 	TEXTURE_DESCRIPTION_INTRO:
 		"The texture will be exported as a PNG. There are three options for setting the colors of the PNG file:",

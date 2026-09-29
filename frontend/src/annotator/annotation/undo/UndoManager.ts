@@ -25,4 +25,6 @@ export interface UndoManager
 	deactivate(): void;
 
 	reset(hard?: boolean): void;
+
+	getCounts(): UndoRedoCount;
 }

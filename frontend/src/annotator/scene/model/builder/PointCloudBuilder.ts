@@ -1,11 +1,13 @@
 import { BUFFER_GEOMETRY_CACHE_CODEC } from "codecs/three/BufferGeometry";
 import {
+	Box3,
 	BufferAttribute,
 	DynamicDrawUsage,
 	MeshBasicMaterial,
 	Points,
 	PointsMaterial,
 	Mesh as ThreeMesh,
+	Vector3,
 	type BufferGeometry,
 } from "three";
 import {
@@ -14,6 +16,7 @@ import {
 	type CacheScope,
 	type CacheSession,
 } from "~cache/index";
+import type { CoordinateShift } from "~entity/ScalarField";
 import { ColorSetting } from "~settings/Settings";
 import { LocalStorageSettingsRegistry } from "~settings/SettingsRegistry";
 import { getBufferGeometryInfo } from "~util/Three";
@@ -70,6 +73,8 @@ export class PointCloudBuilder {
 		if (bufferGeometry) {
 			geometry = bufferGeometry!;
 
+			geometry.userData.hasOriginalColor = geometry.hasAttribute("color");
+
 			if (!geometry.hasAttribute("color")) {
 				const count = geometry.attributes.position.count;
 				const colors = new Float32Array(count * 3);
@@ -90,7 +95,21 @@ export class PointCloudBuilder {
 			colorAttribute.setUsage(DynamicDrawUsage);
 
 			await wait();
-			geometry.center();
+			const boundingBox = new Box3().setFromBufferAttribute(
+				geometry.getAttribute("position") as BufferAttribute
+			);
+			const center = new Vector3();
+			boundingBox.getCenter(center);
+			geometry.translate(-center.x, -center.y, -center.z);
+
+			const previousShift = geometry.userData.coordinateShift as
+				| CoordinateShift
+				| undefined;
+			geometry.userData.coordinateShift = {
+				x: (previousShift?.x ?? 0) + center.x,
+				y: (previousShift?.y ?? 0) + center.y,
+				z: (previousShift?.z ?? 0) + center.z,
+			};
 
 			await cacheSession.write(POINTS_GEOMETRY_RESOURCE, geometry);
 

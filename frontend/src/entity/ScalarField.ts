@@ -1,6 +1,17 @@
 export type ScalarFieldKind = "continuous" | "categorical";
 
 /**
+ * The total translation applied to a point cloud's raw coordinates (e.g. to
+ * avoid float32 precision loss with large absolute coordinates). Adding this
+ * back to a point's viewer-local position recovers its original coordinate.
+ */
+export interface CoordinateShift {
+	x: number;
+	y: number;
+	z: number;
+}
+
+/**
  * Describes a scalar field (e.g. intensity, classification) read from a
  * point cloud's source file (currently only `.ply` custom vertex
  * properties).

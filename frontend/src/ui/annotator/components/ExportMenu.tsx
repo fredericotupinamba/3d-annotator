@@ -3,6 +3,7 @@ import { FileOutput as FileOutputIcon } from "lucide-react";
 import type { PropsWithChildren } from "react";
 import { toast } from "react-toastify";
 import { type SerializerFormatOptions } from "~anno3d/v2/workers/serializer/Anno3DSerializerTask";
+import { buildLasFile } from "~annotator/export/LasWriter";
 import { VISUALIZER_SETTINGS } from "~annotator/scene/visualizer/AnnotationVisualizer";
 import { ModelType } from "~entity/ModelInformation";
 import { writeToHandle } from "~util/fileSystem/FileUtils";
@@ -144,6 +145,45 @@ export function ExportMenuModal() {
 		);
 	}
 
+	async function las() {
+		if (
+			!annotator ||
+			!modelInformation ||
+			!annotator.isPointCloudAnnotator()
+		) {
+			return;
+		}
+
+		const handle = await window.showSaveFilePicker({
+			suggestedName: `${
+				modelInformation.name
+			} (${new Date().toISOString()}).las`,
+		});
+		const fileName = handle.name;
+
+		const id = toast.info("Exporting...", {
+			isLoading: true,
+		});
+
+		const exportData = annotator.getExportData();
+		const buffer = buildLasFile({
+			positions: exportData.positions,
+			shift: exportData.coordinateShift,
+			colors: exportData.colors,
+			classification: annotator.getAnnotationsLUTUnsafe(),
+			extraFields: exportData.scalarFields,
+		});
+
+		await writeToHandle(buffer, handle);
+
+		toast.update(id, {
+			isLoading: false,
+			render: `Saved to "${fileName}"`,
+			type: "success",
+			autoClose: 8000,
+		});
+	}
+
 	function png(mode: "annotationClass" | "color" | "blended") {
 		if (!annotator || !modelInformation) {
 			return;
@@ -237,6 +277,32 @@ export function ExportMenuModal() {
 								</div>
 							</div>
 						</Section>
+						{modelInformation?.modelType ===
+							ModelType.POINT_CLOUD && (
+							<Section>
+								<Heading>
+									{LL.POINT_CLOUD_EXPORT_HEADING()}
+								</Heading>
+								<div>
+									<SubHeading>
+										{LL.LAS_SUBHEADING()}
+									</SubHeading>
+									<div className="flex items-center">
+										<div className="flex-grow ">
+											<Description
+												description={LL.LAS_DESCRIPTION()}
+											/>
+										</div>
+										<button
+											className="btn btn-primary normal-case"
+											onClick={las}
+										>
+											{LL.EXPORT_BUTTON()}
+										</button>
+									</div>
+								</div>
+							</Section>
+						)}
 						{modelInformation?.modelType ===
 							ModelType.TEXTURE_MESH && (
 							<Section>

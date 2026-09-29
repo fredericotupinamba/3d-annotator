@@ -211,6 +211,9 @@ const de: Translation = {
 	FILTER_BY_SCALAR_FIELD: "Filter",
 	ADD_FILTER: "Filter hinzufügen",
 	SELECT_FIELD: "Feld auswählen",
+	EDIT_SCALAR_FIELD: "Feld bearbeiten",
+	NEW_VALUE_PLACEHOLDER: "Neuer Ganzzahlwert",
+	ADD_VALUE: "Wert hinzufügen",
 	FILL_TOOLTIP:
 		"Alles, was nicht gesperrt sind, mit der aktuellen Farbe annotieren",
 
@@ -313,6 +316,10 @@ const de: Translation = {
 	UTF8_SUBHEADING: "UTF-8",
 	UTF8_DESCRIPTION:
 		"Export der aktuellen Annotation im UTF-8 Anno3d Dateiformat.",
+	POINT_CLOUD_EXPORT_HEADING: "Punktwolke",
+	LAS_SUBHEADING: "LAS",
+	LAS_DESCRIPTION:
+		"Exportiert die Punktwolke als .las-Datei, mit den segmentierten Klassen im Classification-Feld. Ursprüngliche Koordinaten, Farben und Skalarfelder aus der Quelldatei (z. B. Intensität, tree_id) bleiben erhalten.",
 	TEXTURE_HEADING: "Textur",
 	TEXTURE_DESCRIPTION_INTRO:
 		"Die Textur wird als PNG exportiert. Es gibt drei Möglichkeiten, die Farben der PNG-Datei zu setzen:",

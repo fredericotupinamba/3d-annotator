@@ -70,7 +70,7 @@ export class HybridUndoManager implements UndoManager {
 		this.labelMap = labelManager.getLabelMap();
 	}
 
-	private getCounts(): UndoRedoCount {
+	public getCounts(): UndoRedoCount {
 		return {
 			undos: this.backwardAnnotations.length,
 			redos: this.forwardAnnotations.length,

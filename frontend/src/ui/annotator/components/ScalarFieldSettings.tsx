@@ -1,5 +1,7 @@
 import { useI18nContext } from "i18n/i18n-react";
 import { useMemo, useState } from "react";
+import { toast } from "react-toastify";
+import type { Label } from "~entity/Annotation";
 import { ModelType } from "~entity/ModelInformation";
 import type { ScalarFieldInfo } from "~entity/ScalarField";
 import {
@@ -29,6 +31,10 @@ export function ScalarFieldSettings() {
 	const [collapsed, setCollapsed] = useState(true);
 	const [colorField, setColorField] = useState("");
 	const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
+	const [editingField, setEditingField] = useState("");
+	const [editableValues, setEditableValues] = useState<Label[]>([]);
+	const [activeEditClass, setActiveEditClass] = useState<number | null>(null);
+	const [newValueInput, setNewValueInput] = useState("");
 
 	const pointCloudAnnotator =
 		modelInformation?.modelType === ModelType.POINT_CLOUD &&
@@ -50,6 +56,55 @@ export function ScalarFieldSettings() {
 	function handleColorFieldChange(name: string) {
 		setColorField(name);
 		pointCloudAnnotator!.setScalarFieldColoring(name || null);
+		// setScalarFieldColoring() always stops any active edit session
+		setEditingField("");
+		setEditableValues([]);
+		setActiveEditClass(null);
+	}
+
+	function handleStartEditingField(fieldName: string) {
+		if (!fieldName) {
+			pointCloudAnnotator!.stopEditingField();
+			setEditingField("");
+			setEditableValues([]);
+			setActiveEditClass(null);
+			return;
+		}
+
+		pointCloudAnnotator!.startEditingField(fieldName);
+		setEditingField(fieldName);
+		// entering edit mode recolors the point cloud by this field, so the
+		// "color by" dropdown should reflect that too
+		setColorField(fieldName);
+
+		const values = pointCloudAnnotator!.getEditableValues();
+		setEditableValues(values);
+		if (values[0]) {
+			pointCloudAnnotator!.setActiveEditValue(values[0]);
+			setActiveEditClass(values[0].annotationClass);
+		}
+	}
+
+	function handleSelectEditValue(label: Label) {
+		pointCloudAnnotator!.setActiveEditValue(label);
+		setActiveEditClass(label.annotationClass);
+	}
+
+	function handleAddEditValue() {
+		const value = Number(newValueInput);
+		if (!Number.isInteger(value)) {
+			toast.error("Please enter an integer value.");
+			return;
+		}
+
+		try {
+			const label = pointCloudAnnotator!.addValueToEditedField(value);
+			setEditableValues(pointCloudAnnotator!.getEditableValues());
+			handleSelectEditValue(label);
+			setNewValueInput("");
+		} catch (error) {
+			toast.error((error as Error).message);
+		}
 	}
 
 	function applyRowFilter(
@@ -314,6 +369,76 @@ export function ScalarFieldSettings() {
 					>
 						{LL.ADD_FILTER()}
 					</button>
+				</div>
+
+				<div className="mt-3">
+					<p>{LL.EDIT_SCALAR_FIELD()}</p>
+					<select
+						className="select select-bordered select-sm mt-1 w-full"
+						value={editingField}
+						onChange={(event) => {
+							handleStartEditingField(event.target.value);
+						}}
+					>
+						<option value="">{LL.NONE()}</option>
+						{scalarFields
+							.filter((field) => field.kind === "categorical")
+							.map((field) => (
+								<option key={field.name} value={field.name}>
+									{field.name}
+								</option>
+							))}
+					</select>
+
+					{editingField && (
+						<div className="mt-2 rounded-xl bg-base-200 p-2">
+							<div className="flex flex-wrap gap-1">
+								{editableValues.map((label) => (
+									<button
+										type="button"
+										key={label.annotationClass}
+										onClick={() => {
+											handleSelectEditValue(label);
+										}}
+										className={`rounded px-2 py-1 text-sm ${
+											activeEditClass ===
+											label.annotationClass
+												? "ring-2 ring-primary"
+												: ""
+										}`}
+										style={{
+											backgroundColor:
+												label.color.asHTMLCode(),
+											color: "#000",
+										}}
+									>
+										{label.name}
+									</button>
+								))}
+							</div>
+
+							<div className="mt-2 flex items-center gap-2">
+								<input
+									type="number"
+									step={1}
+									className="input input-bordered input-sm w-full"
+									placeholder={LL.NEW_VALUE_PLACEHOLDER()}
+									value={newValueInput}
+									onChange={(event) => {
+										setNewValueInput(event.target.value);
+									}}
+								/>
+								<button
+									type="button"
+									className="btn btn-primary btn-sm"
+									disabled={newValueInput === ""}
+									onClick={handleAddEditValue}
+								>
+									{LL.ADD_VALUE()}
+								</button>
+							</div>
+						</div>
+					)}
 				</div>
 			</div>
 		</StandardContainer>

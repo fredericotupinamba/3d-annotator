@@ -22,7 +22,7 @@ export class LabelManager implements Subscribable<LabelManagerEvents> {
 	private readonly _eventManager = new EventManager<LabelManagerEvents>();
 	public on = this._eventManager.on.bind(this._eventManager);
 
-	private readonly _labels: readonly Label[];
+	private readonly _labels: Label[];
 	private readonly _labelLUT: MutableLabelLUT;
 	private readonly _labelMap: LabelMap;
 
@@ -140,6 +140,25 @@ export class LabelManager implements Subscribable<LabelManagerEvents> {
 	 */
 	public getLabels(): Label[] {
 		return [...this._labels];
+	}
+
+	/**
+	 * Registers a new label at runtime (e.g. a locally-scoped label created
+	 * while editing a scalar field, not persisted to the backend). Throws if
+	 * `label`'s `annotationClass` is already in use.
+	 *
+	 * @param label the label to register
+	 */
+	public registerLabel(label: MutableLabel): void {
+		if (this._labelLUT[label.annotationClass] !== undefined) {
+			throw new Error(
+				`annotationClass ${label.annotationClass} is already registered.`
+			);
+		}
+
+		this._labels.push(label);
+		this._labelLUT[label.annotationClass] = label;
+		this._labelMap.set(label.annotationClass, label);
 	}
 
 	/**

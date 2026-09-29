@@ -407,7 +407,7 @@ export abstract class Annotator<T extends Model> implements Destroyable {
 		return new AnnotationManager(model.getIndexCount(), labelManager);
 	}
 
-	private createUndoManager(
+	protected createUndoManager(
 		annotationManager: AnnotationManager
 	): UndoManager {
 		return new HybridUndoManager(annotationManager, this.labelManager);

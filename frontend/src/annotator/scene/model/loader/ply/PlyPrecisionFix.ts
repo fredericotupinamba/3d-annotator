@@ -1,10 +1,7 @@
+import type { CoordinateShift } from "~entity/ScalarField";
 import { extractPlyHeaderText, parsePlyHeader } from "./PlyHeader";
 
-export interface CoordinateShift {
-	x: number;
-	y: number;
-	z: number;
-}
+export type { CoordinateShift };
 
 export interface ShiftedPlyText {
 	text: string;
