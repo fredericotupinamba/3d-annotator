@@ -1,5 +1,7 @@
 # 3D-Annotator
 
+> **Fork notice:** This repository is an edited copy of the original [3D-Annotator](https://github.com/3D-Annotator/3D-Annotator) project. All credit for the original design, research and implementation goes to the original authors — see [Authors](#authors) below. This fork adds point-cloud specific changes on top of the upstream project, including a precision fix for models with large absolute coordinates, and support for coloring/filtering point clouds by scalar fields (e.g. intensity, classification) read from `.ply` files. It may otherwise diverge from the upstream project over time.
+
 ### An open-source, web-based labeling tool for 3D data
 
 ![Annotator](https://github.com/3D-Annotator/3D-Annotator/assets/59662406/b0542488-5f19-456f-9ac7-feb74dbedea1)
