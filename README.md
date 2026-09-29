@@ -33,10 +33,116 @@ Currently, our primary focus is on semantic segmentation. However, the tool’s 
   - [Browser support](#browser-support)
   - [Dev server](#dev-server)
   - [Deploy](#deploy)
+- [How to Install and Run](#how-to-install-and-run)
+  - [Prerequisites](#prerequisites)
+  - [1. Backend setup](#1-backend-setup)
+  - [2. Frontend setup](#2-frontend-setup)
+  - [3. Open the app](#3-open-the-app)
+  - [Default accounts (sample data)](#default-accounts-sample-data)
+  - [Troubleshooting](#troubleshooting)
+  - [Alternative: Docker deployment](#alternative-docker-deployment)
 - [Technical details](#technical-details)
 - [Dataset references](#dataset-references)
 - [Future plans](#future-plans)
 - [Authors](#authors)
+
+# How to Install and Run
+
+This section walks through running 3D-Annotator locally from scratch: a Django backend (API) and a React/Vite frontend (SPA), running as two separate dev servers. This is the recommended way to run the project for local use or evaluation. See [Deploy](#deploy) / [Alternative: Docker deployment](#alternative-docker-deployment) for a production-style setup instead.
+
+## Prerequisites
+
+- **Python 3.10** (3.11 also works)
+- **Node.js ≥ 22** — check with `node --version`. On Windows without a version manager, the quickest way to get an up to date version is `winget install OpenJS.NodeJS.LTS`.
+- **pnpm**, enabled via Node's built-in Corepack (see step 2)
+- A modern Chromium-based browser (Chrome 86+) to actually use the app
+
+## 1. Backend setup
+
+All commands below are run from the `backend/` directory.
+
+```bash
+cd backend
+
+# create and activate a virtual environment
+python -m venv .venv
+source ./.venv/bin/activate        # macOS/Linux
+# .\.venv\Scripts\activate         # Windows (cmd/PowerShell)
+
+# install dependencies
+pip install -r requirements.txt
+
+# create the database
+python manage.py migrate
+
+# optional, but recommended: creates a superuser + sample
+# users/projects/labels to explore right away (see credentials below)
+echo "import annotator.backend.sample_data.initializeSampleData" | python manage.py shell
+
+# start the dev server (http://127.0.0.1:8000)
+export DJANGO_DEBUG=true           # macOS/Linux
+# $env:DJANGO_DEBUG="true"         # Windows PowerShell
+python manage.py runserver
+```
+
+Leave this running in its own terminal. See [backend/README.md](./backend/README.md) for all available environment variables.
+
+## 2. Frontend setup
+
+In a **second terminal**, from the `frontend/` directory:
+
+```bash
+cd frontend
+
+# enable pnpm (bundled with Node via Corepack)
+corepack enable
+# if that fails with a permission error (common on Windows when Node is
+# installed under Program Files), install pnpm globally instead:
+# npm install -g pnpm
+
+pnpm install
+
+# generate the i18n translation files (not checked into git,
+# required once before the first start/build)
+pnpm i18n
+
+pnpm start
+```
+
+Before the first run, create a `frontend/.env.local` file pointing at the backend:
+
+```
+ANNOTATOR_3D_API_BASE_URL=http://127.0.0.1:8000/api
+```
+
+The frontend dev server runs at **http://localhost:3000**.
+
+## 3. Open the app
+
+With both servers running, open **http://localhost:3000** in Chrome and log in (see accounts below), or register a new user.
+
+## Default accounts (sample data)
+
+If you ran the sample data step above, these accounts are available:
+
+| Username | Password | Notes |
+| --- | --- | --- |
+| `admin` | `1234` | Django superuser / admin |
+| `testUser2` | `test12345` | has sample projects and labels already set up |
+| `testUser3`–`testUser5` | `test12345` | additional sample users |
+
+Sample data is defined in [`backend/annotator/backend/sample_data/sampleData.py`](./backend/annotator/backend/sample_data/sampleData.py) and can be customized before running the shell command above.
+
+## Troubleshooting
+
+- **`corepack enable` fails with `EPERM`/permission denied**: happens when Node is installed in a location your user can't write to (e.g. `Program Files` on Windows). Run `npm install -g pnpm` instead, or re-run `corepack enable` from an elevated/administrator terminal.
+- **`pnpm install` fails on the `prepare` (husky) step with "`.git` can't be found"**: this is a known Husky quirk when installing from the `frontend/` subfolder on some setups. It only affects the git pre-commit hook (code formatting on commit), not the app itself — safe to ignore for local use. Run `npx husky install` from the repository root afterwards if you want the hook installed.
+- **Blank page / import errors mentioning `i18n-types`**: make sure you ran `pnpm i18n` at least once — those files are generated, not committed to git.
+- **Large file uploads fail with "BaseFile is too large"**: the backend caps upload size via `ANNOTATOR_BACKEND_MAX_FILE_SIZE` (default 1 GiB). Increase it as an environment variable on the backend if your models are larger.
+
+## Alternative: Docker deployment
+
+Docker files for both the backend (API) and frontend (static file server), plus a Traefik-based `docker-compose` setup, are provided in [`deployment/`](./deployment/). This is closer to a production setup (it expects a domain and HTTPS) and is not required for local development — use it only if you specifically want a containerized/production-style deployment.
 
 # Features
 
