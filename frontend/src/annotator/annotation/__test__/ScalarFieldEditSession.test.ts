@@ -48,6 +48,10 @@ function createTestPointCloud(values: number[]): PointCloud {
 		}
 	).pristineColors = new Float32Array(count * 3);
 
+	// as done by initializeModel() after loading
+	(
+		pointCloud as unknown as { detachScalarFields(): void }
+	).detachScalarFields();
 	return pointCloud;
 }
 
@@ -76,7 +80,7 @@ describe("ScalarFieldEditSession", () => {
 		session.destroy();
 	});
 
-	test("painting a value writes it directly back into the live field attribute", () => {
+	test("painting a value writes it directly back into the live field values", () => {
 		const pointCloud = createTestPointCloud([0, 1, 0, 1]);
 		const session = new ScalarFieldEditSession(
 			createFakeScene(pointCloud),
@@ -89,9 +93,7 @@ describe("ScalarFieldEditSession", () => {
 		session.labelManager.selectLabel(labelForOne);
 		session.annotationManager.annotate([0]); // repaint point 0 (was 0) as 1
 
-		const fieldValues = pointCloud
-			.getPoints()
-			.geometry.getAttribute(FIELD.attributeKey).array as Float32Array;
+		const fieldValues = pointCloud.getScalarFieldValues(FIELD.name);
 
 		expect(fieldValues[0]).toBe(1);
 		expect(fieldValues[1]).toBe(1);
@@ -118,9 +120,7 @@ describe("ScalarFieldEditSession", () => {
 		session.labelManager.selectLabel(newLabel);
 		session.annotationManager.annotate([2]);
 
-		const fieldValues = pointCloud
-			.getPoints()
-			.geometry.getAttribute(FIELD.attributeKey).array as Float32Array;
+		const fieldValues = pointCloud.getScalarFieldValues(FIELD.name);
 		expect(fieldValues[2]).toBe(3);
 
 		session.destroy();
@@ -155,9 +155,7 @@ describe("ScalarFieldEditSession", () => {
 		session.annotationManager.annotate([0]);
 		session.undoManager.endGroup();
 
-		const fieldValues = pointCloud
-			.getPoints()
-			.geometry.getAttribute(FIELD.attributeKey).array as Float32Array;
+		const fieldValues = pointCloud.getScalarFieldValues(FIELD.name);
 		expect(fieldValues[0]).toBe(1);
 
 		session.undoManager.undo();

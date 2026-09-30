@@ -13,8 +13,8 @@ export interface CoordinateShift {
 
 /**
  * Describes a scalar field (e.g. intensity, classification) read from a
- * point cloud's source file (currently only `.ply` custom vertex
- * properties).
+ * point cloud's source file (`.ply` custom vertex properties, or `.las`/`.laz`
+ * standard and Extra Bytes dimensions).
  */
 export interface ScalarFieldInfo {
 	/** the original property name, as found in the source file */

@@ -1,58 +1,134 @@
 import { PLYLoader as ThreePLYLoader } from "three/examples/jsm/loaders/PLYLoader";
-import type { ScalarFieldInfo, ScalarFieldKind } from "~entity/ScalarField";
+import type { ScalarFieldInfo } from "~entity/ScalarField";
 import { createTimeoutProxy } from "~util/Timeout";
 import { findArrayBuffers } from "~util/Util";
 import { type LoaderWorkerReceive, type LoaderWorkerSend } from "../Loader";
-import { findScalarPropertyNames, parsePlyHeader } from "./PlyHeader";
+import {
+	createPointCloudGeometry,
+	type PointCloudData,
+} from "../PointCloudGeometry";
+import { analyzeScalarAttribute } from "../ScalarFieldAnalysis";
+import {
+	extractPlyHeaderText,
+	findScalarPropertyNames,
+	parsePlyHeader,
+} from "./PlyHeader";
+import {
+	getPlyPointCloudLayout,
+	PlyPointCloudReader,
+	type PlyPointCloudLayout,
+} from "./PlyPointCloudReader";
 import { shiftAsciiPlyVertices, type CoordinateShift } from "./PlyPrecisionFix";
 
 // A .ply header is plain text, terminated by "end_header", even in binary
 // encoded files. This is comfortably larger than any realistic header.
 const HEADER_PROBE_SIZE = 1_048_576;
 
-const CATEGORICAL_MAX_UNIQUE_VALUES = 32;
+/** point cloud bodies are read in chunks of this size */
+const READ_CHUNK_SIZE = 64 * 1024 * 1024;
 
-function analyzeScalarAttribute(values: ArrayLike<number>): {
-	kind: ScalarFieldKind;
-	min: number;
-	max: number;
-	uniqueValues?: number[];
-} {
-	let min = Infinity;
-	let max = -Infinity;
-	const uniqueValues = new Set<number>();
-	let isCategorical = true;
+type ProgressCallback = (progress: { loaded: number; total: number }) => void;
 
-	for (let i = 0; i < values.length; i++) {
-		const value = values[i];
-		if (value < min) min = value;
-		if (value > max) max = value;
+/**
+ * Reads the vertex body of a point cloud ply file chunk by chunk, so the
+ * complete file is never held in memory.
+ */
+async function readPointCloud(
+	file: File,
+	layout: PlyPointCloudLayout,
+	bodyOffset: number,
+	onProgress?: ProgressCallback
+): Promise<PointCloudData> {
+	const reader = new PlyPointCloudReader(layout);
+	const textDecoder = layout.format === "ascii" ? new TextDecoder() : null;
 
-		if (isCategorical) {
-			if (!Number.isInteger(value)) {
-				isCategorical = false;
-			} else {
-				uniqueValues.add(value);
-				if (uniqueValues.size > CATEGORICAL_MAX_UNIQUE_VALUES) {
-					isCategorical = false;
-				}
-			}
+	for (
+		let offset = bodyOffset;
+		offset < file.size && !reader.isComplete;
+		offset += READ_CHUNK_SIZE
+	) {
+		const bytes = new Uint8Array(
+			await file.slice(offset, offset + READ_CHUNK_SIZE).arrayBuffer()
+		);
+		if (textDecoder) {
+			reader.pushText(textDecoder.decode(bytes, { stream: true }));
+		} else {
+			reader.pushBytes(bytes);
 		}
+		onProgress?.({
+			loaded: Math.min(offset + READ_CHUNK_SIZE, file.size),
+			total: file.size,
+		});
+	}
+	if (textDecoder) {
+		reader.pushText(textDecoder.decode());
 	}
 
-	return isCategorical
-		? {
-				kind: "categorical",
-				min,
-				max,
-				uniqueValues: Array.from(uniqueValues).sort((a, b) => a - b),
-		  }
-		: { kind: "continuous", min, max };
+	return reader.finish();
+}
+
+/**
+ * Tries to read the file as a point cloud with {@link PlyPointCloudReader}.
+ *
+ * @returns `true` if the file was loaded (and posted), `false` if it has to
+ *          be loaded by three.js' PLYLoader instead (e.g. meshes)
+ */
+async function tryLoadPointCloud(
+	modelFile: File,
+	onProgress?: ProgressCallback
+): Promise<boolean> {
+	// windows-1252 maps every byte to exactly one character, so the header's
+	// length in characters equals the byte offset of the body
+	const probeText = new TextDecoder("windows-1252").decode(
+		await modelFile.slice(0, HEADER_PROBE_SIZE).arrayBuffer()
+	);
+	const headerText = extractPlyHeaderText(probeText);
+	const header = headerText ? parsePlyHeader(headerText) : null;
+	const layout = header ? getPlyPointCloudLayout(header) : null;
+	if (!headerText || !layout) {
+		return false;
+	}
+
+	const data = await readPointCloud(
+		modelFile,
+		layout,
+		headerText.length,
+		onProgress
+	);
+	const { geometry, transfer } = createPointCloudGeometry(data);
+	postMessage<LoaderWorkerSend>({ geometryClone: geometry }, { transfer });
+	return true;
 }
 
 onmessage = async function ({ data }: MessageEvent<LoaderWorkerReceive>) {
 	const { modelFile, options } = data;
 
+	const onProgress = options.hasProgressObserver
+		? // don't call postMessage on every progress update
+		  createTimeoutProxy((progress: { loaded: number; total: number }) => {
+				postMessage<LoaderWorkerSend>({ progress });
+		  })
+		: undefined;
+
+	try {
+		if (await tryLoadPointCloud(modelFile, onProgress)) {
+			return;
+		}
+	} catch (error) {
+		postMessage<LoaderWorkerSend>({ error });
+		return;
+	}
+
+	await loadWithThree(modelFile, options);
+};
+
+/**
+ * Loads any ply file (in particular meshes) with three.js' PLYLoader.
+ */
+async function loadWithThree(
+	modelFile: File,
+	options: LoaderWorkerReceive["options"]
+) {
 	let fileToLoad = modelFile;
 	let coordinateShift: CoordinateShift | undefined;
 	let scalarPropertyNames: string[] = [];
@@ -146,4 +222,4 @@ onmessage = async function ({ data }: MessageEvent<LoaderWorkerReceive>) {
 	} finally {
 		URL.revokeObjectURL(modelURL);
 	}
-};
+}

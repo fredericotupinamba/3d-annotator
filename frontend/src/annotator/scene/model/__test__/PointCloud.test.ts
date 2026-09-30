@@ -41,6 +41,10 @@ function createTestPointCloud(
 	const points = new Points(geometry, new PointsMaterial());
 	(pointCloud as unknown as { points: Points }).points = points;
 
+	// as done by initializeModel() after loading
+	(
+		pointCloud as unknown as { detachScalarFields(): void }
+	).detachScalarFields();
 	return pointCloud;
 }
 
@@ -182,5 +186,32 @@ describe("PointCloud scalar field filtering", () => {
 				selectedValues: [1],
 			});
 		}).toThrow();
+	});
+});
+
+describe("PointCloud scalar field storage", () => {
+	test("keeps scalar fields out of the geometry, so they are not uploaded to the GPU", () => {
+		const pointCloud = createTestPointCloud([classField([1, 2, 3, 1])]);
+		const geometry = pointCloud.getPoints().geometry;
+
+		expect(
+			geometry.getAttribute("scalarField_classification")
+		).toBeUndefined();
+		expect(
+			Array.from(pointCloud.getScalarFieldValues("classification"))
+		).toEqual([1, 2, 3, 1]);
+	});
+
+	test("only allocates filter attributes for slots that are used", () => {
+		const pointCloud = createTestPointCloud([classField([1, 2, 3, 1])]);
+		pointCloud.setFilterSlot(1, {
+			fieldName: "classification",
+			mode: "set",
+			selectedValues: [1],
+		});
+		const geometry = pointCloud.getPoints().geometry;
+
+		expect(geometry.getAttribute("filterValue0")).toBeUndefined();
+		expect(geometry.getAttribute("filterValue1")).toBeDefined();
 	});
 });

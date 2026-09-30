@@ -2,13 +2,13 @@ import { BUFFER_GEOMETRY_CACHE_CODEC } from "codecs/three/BufferGeometry";
 import {
 	Box3,
 	BufferAttribute,
+	BufferGeometry,
 	DynamicDrawUsage,
 	MeshBasicMaterial,
 	Points,
 	PointsMaterial,
 	Mesh as ThreeMesh,
 	Vector3,
-	type BufferGeometry,
 } from "three";
 import {
 	createMainThreadCacheRuntime,
@@ -36,6 +36,14 @@ const settingsRegistry = new LocalStorageSettingsRegistry(
 	"pointCloudBuilder-JLzS9"
 );
 settingsRegistry.registerMultiple(POINT_CLOUD_BUILDER_SETTINGS);
+
+/**
+ * Points per BVH leaf. The default (10) gives ~6x more tree nodes, which
+ * three-mesh-bvh builds as JS objects before packing them, e.g. a 257 MB
+ * tree (instead of 42 MB) for a 28M point cloud. Queries testing up to 64
+ * points per leaf are still cheap.
+ */
+const POINTS_BVH_MAX_LEAF_SIZE = 64;
 
 export const POINTS_GEOMETRY_RESOURCE = defineTypedModelCacheResource(
 	"points-geometry",
@@ -152,18 +160,37 @@ export class PointCloudBuilder {
 	) {
 		let bvhGeometry: BufferGeometry;
 
+		// The BVH geometry shares the points' position attribute (same object),
+		// so positions are only held in memory once. It holds nothing else
+		// besides the (BVH ordered) index.
+		const positionAttribute = pointsGeometry.getAttribute(
+			"position"
+		) as BufferAttribute;
+
 		if (await cacheSession.has(BUILDER_RESULT_RESOURCE)) {
 			// todo: handle null (cache version mismatch...)
 			bvhGeometry = (await cacheSession.read(BUILDER_RESULT_RESOURCE))!;
+			bvhGeometry.setAttribute("position", positionAttribute);
 
 			console.log(`Retrieved from cache: ${BUILDER_RESULT_RESOURCE.id}.`);
 		} else {
-			bvhGeometry = pointsGeometry.clone();
-			bvhGeometry.deleteAttribute("color");
-			await wait();
+			bvhGeometry = new BufferGeometry();
+			// The BVH builder transfers the position buffer to a worker, which
+			// is only safe if no other attribute is a view on the same buffer.
+			const positions = positionAttribute.array;
+			const ownsBuffer =
+				positions.byteOffset === 0 &&
+				positions.byteLength === positions.buffer.byteLength;
+			bvhGeometry.setAttribute(
+				"position",
+				ownsBuffer
+					? positionAttribute
+					: new BufferAttribute(positions.slice(), 3)
+			);
 
-			const verticesLength = bvhGeometry.attributes.position.count;
-			const indices = new Array(verticesLength * 3);
+			// every point is represented by a degenerate triangle (i, i, i)
+			const verticesLength = positionAttribute.count;
+			const indices = new Uint32Array(verticesLength * 3);
 
 			for (let i = 0, base = 0; i < verticesLength; i++, base += 3) {
 				indices[base] = i;
@@ -172,11 +199,13 @@ export class PointCloudBuilder {
 			}
 			await wait();
 
-			bvhGeometry.setIndex(indices);
+			bvhGeometry.setIndex(new BufferAttribute(indices, 1));
 
 			await wait();
 			const bvhBuilder = new NonBlockingBVHBuilder();
-			const bvh = await bvhBuilder.build(bvhGeometry);
+			const bvh = await bvhBuilder.build(bvhGeometry, {
+				maxLeafTris: POINTS_BVH_MAX_LEAF_SIZE,
+			});
 			bvhBuilder.destroy();
 			bvhGeometry.boundsTree = bvh;
 

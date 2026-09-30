@@ -45,6 +45,8 @@ const de: Translation = {
 	NO_MODEL_DATA_PREVIEWS_MSG: "Keine Dateien ausgewählt",
 	NO_MODEL_TYPE_MSG: "Kein Modelltyp ausgewählt",
 	NO_TEXTURE_MSG: "Keine Texturdatei ausgewählt",
+	LAS_REQUIRES_POINT_CLOUD_MSG:
+		"LAS/LAZ-Dateien können nur als Punktwolke hochgeladen werden",
 	UNNAMED_MODEL_DATA_PREVIEW_MSG: "Unbenannte Dateien",
 
 	TRIANGLE_MESH: "Mesh",
@@ -112,6 +114,7 @@ const de: Translation = {
 	SETTING_UP_ANNOTATOR: "Annotator starten...",
 	SETTING_UP_ANNOTATOR_ABORTED: "Annotator starten, Abbruch...",
 	FINISHED_SETUP: "Setup abgeschlossen",
+	SETUP_FAILED: "Das Modell konnte nicht geöffnet werden:",
 
 	// Parser & Loader Errors
 	PARSER_UNKNOWN_LABEL:

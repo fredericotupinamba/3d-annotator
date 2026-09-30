@@ -70,6 +70,14 @@ export function useSetup(sceneParentRef: React.RefObject<HTMLDivElement>) {
 	}
 
 	useEffect(() => {
+		// After a page reload the user is restored asynchronously. Starting
+		// without it breaks the lock check (e.g. for a model locked by this
+		// user); this effect runs again once the user is available.
+		if (!user) {
+			return;
+		}
+		const currentUser = user;
+
 		const apiAbortController = new AbortController();
 		const setupAbortController = new AnnotatorSetupAbortController();
 
@@ -115,7 +123,7 @@ export function useSetup(sceneParentRef: React.RefObject<HTMLDivElement>) {
 			 *  Check lock state of model
 			 */
 			const locked = modelInformation.locked;
-			ownsLock = locked ? locked.id === user!.id : false;
+			ownsLock = locked ? locked.id === currentUser.id : false;
 
 			if (locked && !ownsLock) {
 				// go back to project page
@@ -199,7 +207,7 @@ export function useSetup(sceneParentRef: React.RefObject<HTMLDivElement>) {
 				case ModelType.MESH:
 					annotator = new MeshAnnotator(
 						runtime,
-						user!,
+						currentUser,
 						sceneParentRef.current,
 						modelInformation,
 						labels
@@ -208,7 +216,7 @@ export function useSetup(sceneParentRef: React.RefObject<HTMLDivElement>) {
 				case ModelType.TEXTURE_MESH:
 					annotator = new TextureAnnotator(
 						runtime,
-						user!,
+						currentUser,
 						sceneParentRef.current,
 						modelInformation,
 						labels
@@ -217,7 +225,7 @@ export function useSetup(sceneParentRef: React.RefObject<HTMLDivElement>) {
 				case ModelType.POINT_CLOUD:
 					annotator = new PointCloudAnnotator(
 						runtime,
-						user!,
+						currentUser,
 						sceneParentRef.current,
 						modelInformation,
 						labels
@@ -415,7 +423,20 @@ export function useSetup(sceneParentRef: React.RefObject<HTMLDivElement>) {
 			setAnnotator(annotator);
 		}
 
-		start();
+		// without this, a failure (e.g. running out of memory while building
+		// the BVH) leaves the loading screen spinning forever
+		start().catch((error: unknown) => {
+			if (setupAbortController.aborted) return;
+			console.error("Annotator setup failed:", error);
+			updateLoadingState(
+				`${LL.SETUP_FAILED()} ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+				undefined,
+				false,
+				true
+			);
+		});
 
 		return () => {
 			apiAbortController.abort();

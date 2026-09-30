@@ -1,6 +1,8 @@
 import { err, ok, type Result } from "neverthrow";
 import {
 	BufferAttribute,
+	SRGBColorSpace,
+	Color as ThreeColor,
 	type BufferGeometry,
 	type Object3D,
 	type Points,
@@ -61,10 +63,29 @@ export interface PointCloudExportData {
 	positions: Float32Array;
 	/** added to `positions` to recover the original real-world coordinates */
 	coordinateShift: CoordinateShift;
-	/** interleaved r,g,b in [0, 1], or `null` if the source file had no color */
+	/** interleaved r,g,b in [0, 1], sRGB encoded (as in the source file), or `null` if the source file had no color */
 	colors: Float32Array | null;
 	/** the raw values of every scalar field discovered in the source file */
 	scalarFields: { name: string; values: Float32Array }[];
+}
+
+/**
+ * Loaders convert sRGB file colors to the linear working color space (see
+ * three.js' PLYLoader). This reverses that conversion for exporting.
+ */
+function linearToSRGBColors(linearColors: Float32Array): Float32Array {
+	const srgbColors = new Float32Array(linearColors.length);
+	const color = new ThreeColor();
+	const srgb = { r: 0, g: 0, b: 0 };
+	for (let i = 0; i < linearColors.length; i += 3) {
+		color
+			.setRGB(linearColors[i], linearColors[i + 1], linearColors[i + 2])
+			.getRGB(srgb, SRGBColorSpace);
+		srgbColors[i] = srgb.r;
+		srgbColors[i + 1] = srgb.g;
+		srgbColors[i + 2] = srgb.b;
+	}
+	return srgbColors;
 }
 
 export const POINT_CLOUD_SETTINGS = {
@@ -94,6 +115,9 @@ export class PointCloud implements Model {
 	private pristineColors?: Float32Array;
 
 	private filterSlots?: FilterSlotUniforms[];
+
+	/** scalar field values by field name, kept outside of the geometry, see {@link initializeModel} */
+	private readonly scalarFieldValues = new Map<string, Float32Array>();
 
 	constructor(scope: CacheScope) {
 		this.settings = createSettingsManager(POINT_CLOUD_SETTINGS);
@@ -165,7 +189,30 @@ export class PointCloud implements Model {
 			colorAttribute.array as Float32Array
 		);
 
+		this.detachScalarFields();
+
 		return ok(undefined);
+	}
+
+	/**
+	 * Moves the scalar field values out of the points geometry. They are
+	 * only ever read on the CPU (colormaps, filters, export, editing); left
+	 * as geometry attributes, three.js would also upload every one of them
+	 * to the GPU, which for large clouds with many fields costs gigabytes.
+	 */
+	private detachScalarFields(): void {
+		const geometry = this.getPoints().geometry;
+		for (const field of this.getScalarFields()) {
+			const attribute = geometry.getAttribute(field.attributeKey) as
+				| BufferAttribute
+				| undefined;
+			if (!attribute) continue;
+			this.scalarFieldValues.set(
+				field.name,
+				attribute.array as Float32Array
+			);
+			geometry.deleteAttribute(field.attributeKey);
+		}
 	}
 
 	/**
@@ -180,6 +227,21 @@ export class PointCloud implements Model {
 				| ScalarFieldInfo[]
 				| undefined) ?? []
 		);
+	}
+
+	/**
+	 * Returns the per-point values of a scalar field. The array is shared,
+	 * writing to it changes the field's values.
+	 *
+	 * @param fieldName the scalar field's name
+	 * @returns one value per point
+	 */
+	public getScalarFieldValues(fieldName: string): Float32Array {
+		const values = this.scalarFieldValues.get(fieldName);
+		if (!values) {
+			throw new Error(`Unknown scalar field '${fieldName}'.`);
+		}
+		return values;
 	}
 
 	/**
@@ -209,10 +271,7 @@ export class PointCloud implements Model {
 			throw new Error(`Unknown scalar field '${fieldName}'.`);
 		}
 
-		const attribute = this.getPoints().geometry.getAttribute(
-			field.attributeKey
-		) as BufferAttribute;
-		const values = attribute.array as Float32Array;
+		const values = this.getScalarFieldValues(field.name);
 		const kind = kindOverride ?? field.kind;
 
 		return kind === "categorical" && field.uniqueValues
@@ -235,17 +294,17 @@ export class PointCloud implements Model {
 			| CoordinateShift
 			| undefined) ?? { x: 0, y: 0, z: 0 };
 
+		// The "color" attribute holds the currently displayed colors (blended
+		// with annotation labels, or a scalar field colormap), so the colors
+		// captured right after loading are used instead.
 		const colors =
-			geometry.userData.hasOriginalColor === true
-				? ((geometry.getAttribute("color") as BufferAttribute)
-						.array as Float32Array)
+			geometry.userData.hasOriginalColor === true && this.pristineColors
+				? linearToSRGBColors(this.pristineColors)
 				: null;
 
 		const scalarFields = this.getScalarFields().map((field) => ({
 			name: field.name,
-			values: (
-				geometry.getAttribute(field.attributeKey) as BufferAttribute
-			).array as Float32Array,
+			values: this.getScalarFieldValues(field.name),
 		}));
 
 		return { positions, coordinateShift, colors, scalarFields };
@@ -278,13 +337,8 @@ export class PointCloud implements Model {
 			throw new Error(`Unknown scalar field '${filter.fieldName}'.`);
 		}
 
-		const geometry = this.getPoints().geometry;
-		const sourceValues = (
-			geometry.getAttribute(field.attributeKey) as BufferAttribute
-		).array as Float32Array;
-		const filterAttribute = geometry.getAttribute(
-			`${FILTER_ATTRIBUTE_PREFIX}${slot}`
-		) as BufferAttribute;
+		const sourceValues = this.getScalarFieldValues(field.name);
+		const filterAttribute = this.getOrCreateFilterAttribute(slot);
 		const filterValues = filterAttribute.array as Float32Array;
 
 		if (filter.mode === "range") {
@@ -346,6 +400,25 @@ export class PointCloud implements Model {
 		return visible;
 	}
 
+	/**
+	 * Filter attributes are only allocated once their slot is first used
+	 * (one float per point each). Slots without an attribute are always
+	 * disabled, so the shader never reads them.
+	 */
+	private getOrCreateFilterAttribute(slot: number): BufferAttribute {
+		const geometry = this.getPoints().geometry;
+		const name = `${FILTER_ATTRIBUTE_PREFIX}${slot}`;
+		let attribute = geometry.getAttribute(name) as
+			| BufferAttribute
+			| undefined;
+		if (!attribute) {
+			const pointCount = geometry.getAttribute("position").count;
+			attribute = new BufferAttribute(new Float32Array(pointCount), 1);
+			geometry.setAttribute(name, attribute);
+		}
+		return attribute;
+	}
+
 	private getActiveFilters(): {
 		values: Float32Array;
 		mode: number;
@@ -393,15 +466,8 @@ export class PointCloud implements Model {
 			return this.filterSlots;
 		}
 
-		const geometry = this.getPoints().geometry;
-		const pointCount = geometry.getAttribute("position").count;
-
 		const slots: FilterSlotUniforms[] = [];
 		for (let i = 0; i < MAX_ACTIVE_FILTERS; i++) {
-			geometry.setAttribute(
-				`${FILTER_ATTRIBUTE_PREFIX}${i}`,
-				new BufferAttribute(new Float32Array(pointCount), 1)
-			);
 			slots.push({
 				enabled: { value: false },
 				mode: { value: FILTER_MODE_RANGE },

@@ -13,7 +13,7 @@ export async function unzipBlob(
 	const data = new Uint8Array(await blob.arrayBuffer());
 
 	return new Promise<NameableData<Uint8Array>[]>((resolve, reject) => {
-		unzip(new Uint8Array(data), (error, files) => {
+		unzip(data, (error, files) => {
 			if (error) {
 				reject(error);
 				return;

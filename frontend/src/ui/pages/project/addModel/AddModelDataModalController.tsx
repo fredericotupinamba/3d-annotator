@@ -1,12 +1,17 @@
 import { getI18NContext } from "i18n/vanilla-context";
 import { useState } from "react";
 import { toast } from "react-toastify";
+import { LAS_FILE_EXTENSIONS } from "~annotator/scene/model/loader/las/NonBlockingLASLoader";
 import { Errors } from "~api/Errors";
 import { ModelType } from "~entity/ModelInformation";
 import { ElementList } from "~ui/components/ElementList";
 import { useAPI } from "~ui/contexts/APIContext";
 import { ModelDataPreviewItem } from "~ui/pages/project/addModel/ModelDataPreviewItem";
-import { fileExtension, fileName } from "~util/fileSystem/FileUtils";
+import {
+	fileExtension,
+	fileName,
+	hasFileExtension,
+} from "~util/fileSystem/FileUtils";
 import { assertUnreachable } from "~util/TypeScript";
 import { useProjectPageStore } from "../ProjectPage";
 
@@ -265,6 +270,10 @@ export function AddModelDataModalController({
 						".OBJ" as const,
 						".ply" as const,
 						".PLY" as const,
+						".las" as const,
+						".LAS" as const,
+						".laz" as const,
+						".LAZ" as const,
 						".jpeg" as const,
 						".JPEG" as const,
 						".jpg" as const,
@@ -320,7 +329,9 @@ export function AddModelDataModalController({
 		const textureFiles: File[] = [];
 		const annotationFiles: File[] = [];
 
-		const modelFileRegEx = new RegExp("(obj)|(OBJ)|(ply)|(PLY)");
+		const modelFileRegEx = new RegExp(
+			"(obj)|(OBJ)|(ply)|(PLY)|(las)|(LAS)|(laz)|(LAZ)"
+		);
 		const textureFileRegEx = new RegExp("(jpeg)|(JPEG)|(jpg)|(JPG)");
 		const annotationFileRegEx = new RegExp(
 			"(txt)|(TXT)|(anno3d)|(ANNO3D)|(png)|(PNG)"
@@ -468,6 +479,19 @@ export function AddModelDataModalController({
 				setError({
 					error: true,
 					message: LL.UNNAMED_MODEL_DATA_PREVIEW_MSG(),
+				});
+				return;
+			}
+
+			if (
+				modelType !== ModelType.POINT_CLOUD &&
+				hasFileExtension(preview.modelFile, LAS_FILE_EXTENSIONS)
+			) {
+				setError({
+					error: true,
+					message: `${LL.LAS_REQUIRES_POINT_CLOUD_MSG()} (${
+						preview.name
+					})`,
 				});
 				return;
 			}

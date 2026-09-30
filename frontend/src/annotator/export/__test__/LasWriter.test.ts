@@ -213,6 +213,54 @@ describe("buildLasFile", () => {
 		expect(result.points[1].extra).toEqual([2, 99.25]);
 	});
 
+	test("writes standard-named fields to their LAS dimensions", () => {
+		const buffer = buildLasFile({
+			positions: [0, 0, 0, 1, 1, 1],
+			shift: { x: 0, y: 0, z: 0 },
+			classification: [4, 5],
+			extraFields: [
+				{ name: "Intensity", values: [1000, 2000] },
+				{ name: "ReturnNumber", values: [1, 2] },
+				{ name: "NumberOfReturns", values: [2, 2] },
+				{ name: "UserData", values: [7, 8] },
+				{ name: "PointSourceId", values: [300, 301] },
+				{ name: "Classification", values: [2, 3] },
+				{ name: "tree_id", values: [9, 10] },
+			],
+		});
+
+		const result = readLasFile(buffer);
+		const view = new DataView(buffer);
+		const record = (i: number) =>
+			result.pointDataOffset + i * result.pointRecordLength;
+
+		expect(result.extraFieldNames).toEqual([
+			"OriginalClassification",
+			"tree_id",
+		]);
+		expect(result.points[1].classification).toBe(5);
+		expect(result.points[1].extra).toEqual([3, 10]);
+
+		expect(view.getUint16(record(1) + 12, true)).toBe(2000);
+		expect(view.getUint8(record(1) + 14)).toBe(2 | (2 << 4));
+		expect(view.getUint8(record(1) + 17)).toBe(8);
+		expect(view.getUint16(record(1) + 20, true)).toBe(301);
+	});
+
+	test("keeps standard-named fields that don't fit as prefixed Extra Bytes", () => {
+		const result = readLasFile(
+			buildLasFile({
+				positions: [0, 0, 0],
+				shift: { x: 0, y: 0, z: 0 },
+				classification: [0],
+				extraFields: [{ name: "Intensity", values: [0.5] }],
+			})
+		);
+
+		expect(result.extraFieldNames).toEqual(["OriginalIntensity"]);
+		expect(result.points[0].extra).toEqual([0.5]);
+	});
+
 	test("computes the bounding box from the shifted coordinates", () => {
 		const shift = { x: 100, y: 200, z: 300 };
 		const input: LasExportInput = {

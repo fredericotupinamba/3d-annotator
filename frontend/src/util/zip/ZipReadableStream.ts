@@ -11,7 +11,8 @@ import { AsyncProgressZipPassThrough } from "./AsyncProgressZipPassThrough";
  * Each stream is written to an own file in the zip folders root.
  *
  * Whether compression is used, depends on the file extension and content:
- * Everything is compressed except png, jpg/jpeg and binary encoded ply files.
+ * Everything is compressed except png, jpg/jpeg, las/laz and binary encoded
+ * ply files.
  */
 export class ZipReadableStream extends ReadableStream<Uint8Array> {
 	constructor(
@@ -51,7 +52,15 @@ export class ZipReadableStream extends ReadableStream<Uint8Array> {
 
 				let compress = true;
 
-				if (hasFileExtension(streamData, ["png", "jpg", "jpeg"])) {
+				if (
+					hasFileExtension(streamData, [
+						"png",
+						"jpg",
+						"jpeg",
+						"las",
+						"laz",
+					])
+				) {
 					compress = false;
 				} else if (hasFileExtension(streamData, ["ply"])) {
 					try {

@@ -6,6 +6,11 @@
  * `tree_id`) via the standard "Extra Bytes" VLR, so they show up as regular
  * dimensions in PDAL, CloudCompare, QGIS, etc.
  *
+ * Extra fields named like a standard LAS dimension (as produced when a LAS
+ * file is imported, e.g. `Intensity`) are written to that dimension instead.
+ * A source `Classification` field is kept as `OriginalClassification`, since
+ * the Classification dimension holds the segmented classes.
+ *
  * Spec reference: ASPRS LAS Specification 1.4 - R15.
  */
 
@@ -19,6 +24,17 @@ const VLR_HEADER_LENGTH = 54;
 const COORDINATE_SCALE = 0.001;
 /** LAS stores color as 16-bit; convention is to fill the low byte too (value * 257) */
 const COLOR_8_TO_16_BIT = 257;
+
+/** standard point record dimensions that extra fields can be written to, with their max value */
+const STANDARD_FIELD_MAX_VALUE = new Map([
+	["Intensity", 0xffff],
+	["ReturnNumber", 0x0f],
+	["NumberOfReturns", 0x0f],
+	["UserData", 0xff],
+	["PointSourceId", 0xffff],
+]);
+/** prefix for extra fields that clash with a standard dimension but can't be written to it */
+const CLASHING_FIELD_PREFIX = "Original";
 
 export interface LasExtraField {
 	/** dimension name, as it will show up in downstream tools (max 32 ASCII chars) */
@@ -77,6 +93,48 @@ function computeBounds(
 	return { min, max };
 }
 
+function fitsStandardField(values: ArrayLike<number>, maxValue: number) {
+	for (let i = 0; i < values.length; i++) {
+		const value = values[i];
+		if (!Number.isInteger(value) || value < 0 || value > maxValue) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * Splits extra fields into those written to a standard dimension (keyed by
+ * dimension name) and those written as Extra Bytes dimensions.
+ */
+function partitionExtraFields(fields: LasExtraField[]): {
+	standard: Map<string, ArrayLike<number>>;
+	extra: LasExtraField[];
+} {
+	const standard = new Map<string, ArrayLike<number>>();
+	const extra: LasExtraField[] = [];
+
+	for (const field of fields) {
+		const maxValue = STANDARD_FIELD_MAX_VALUE.get(field.name);
+		if (
+			maxValue !== undefined &&
+			!standard.has(field.name) &&
+			fitsStandardField(field.values, maxValue)
+		) {
+			standard.set(field.name, field.values);
+		} else if (maxValue !== undefined || field.name === "Classification") {
+			extra.push({
+				name: CLASHING_FIELD_PREFIX + field.name,
+				values: field.values,
+			});
+		} else {
+			extra.push(field);
+		}
+	}
+
+	return { standard, extra };
+}
+
 /**
  * Builds a complete, uncompressed LAS 1.4 file.
  *
@@ -89,9 +147,17 @@ export function buildLasFile(input: LasExportInput): ArrayBuffer {
 		shift,
 		colors,
 		classification,
-		extraFields = [],
+		extraFields: inputExtraFields = [],
 		generatingSoftware = "3D-Annotator",
 	} = input;
+
+	const { standard: standardFields, extra: extraFields } =
+		partitionExtraFields(inputExtraFields);
+	const intensity = standardFields.get("Intensity");
+	const returnNumber = standardFields.get("ReturnNumber");
+	const numberOfReturns = standardFields.get("NumberOfReturns");
+	const userData = standardFields.get("UserData");
+	const pointSourceId = standardFields.get("PointSourceId");
 
 	const pointCount = classification.length;
 	const extraBytesPerPoint = extraFields.length * 8;
@@ -215,13 +281,17 @@ export function buildLasFile(input: LasExportInput): ArrayBuffer {
 			true
 		);
 
-		view.setUint16(recordOffset + 12, 0, true); // intensity
-		view.setUint8(recordOffset + 14, 0x11); // return number = 1, number of returns = 1
+		view.setUint16(recordOffset + 12, intensity?.[i] ?? 0, true);
+		// return number (bits 0-3) and number of returns (bits 4-7), default 1
+		view.setUint8(
+			recordOffset + 14,
+			(returnNumber?.[i] ?? 1) | ((numberOfReturns?.[i] ?? 1) << 4)
+		);
 		view.setUint8(recordOffset + 15, 0); // classification flags / scanner channel
 		view.setUint8(recordOffset + 16, classification[i] & 0xff);
-		view.setUint8(recordOffset + 17, 0); // user data
+		view.setUint8(recordOffset + 17, userData?.[i] ?? 0);
 		view.setInt16(recordOffset + 18, 0, true); // scan angle
-		view.setUint16(recordOffset + 20, 0, true); // point source ID
+		view.setUint16(recordOffset + 20, pointSourceId?.[i] ?? 0, true);
 		view.setFloat64(recordOffset + 22, 0, true); // GPS time
 
 		if (colors) {

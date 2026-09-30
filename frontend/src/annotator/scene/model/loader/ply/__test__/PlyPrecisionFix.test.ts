@@ -12,9 +12,7 @@ function buildAsciiPly(vertices: [number, number, number][]): string {
 		"end_header",
 	].join("\n");
 
-	const body = vertices
-		.map(([x, y, z]) => `${x} ${y} ${z} 255`)
-		.join("\n");
+	const body = vertices.map(([x, y, z]) => `${x} ${y} ${z} 255`).join("\n");
 
 	return `${header}\n${body}\n`;
 }

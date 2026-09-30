@@ -23,11 +23,9 @@ export class PointCloudAnnotationVisualizer extends BaseVisualizer {
 	constructor(scene: Scene<PointCloud>, labelManager: LabelManager) {
 		super(VISUALIZER_SETTINGS, labelManager);
 		this.scene = scene;
-		const geometry = scene.getModel().getPoints().geometry;
-		const colorAttribute = geometry.getAttribute(
-			"color"
-		) as BufferAttribute;
-		this.originalColors = Float32Array.from(colorAttribute.array);
+		// shared with the model (never modified here), not copied: a point
+		// cloud's colors can take hundreds of MB
+		this.originalColors = scene.getModel().computeBaseColors(null);
 	}
 
 	/**

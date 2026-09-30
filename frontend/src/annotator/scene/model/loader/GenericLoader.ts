@@ -3,6 +3,10 @@ import { type BufferGeometry, type Texture } from "three";
 import { type Observer } from "~events/Events";
 import { hasFileExtension } from "~util/fileSystem/FileUtils";
 import { getBufferGeometryInfo, getTextureInfo } from "~util/Three";
+import {
+	LAS_FILE_EXTENSIONS,
+	NonBlockingLASLoader,
+} from "./las/NonBlockingLASLoader";
 import { type Loader, type LoaderError } from "./Loader";
 import {
 	NonBlockingOBJLoader,
@@ -67,6 +71,12 @@ export class GenericLoader implements Loader<GenericLoaderResult, File[]> {
 				hasFileExtension(file, PLY_FILE_EXTENSIONS)
 			) {
 				modelLoaderConstructor = NonBlockingPLYLoader;
+				modelFile = file;
+			} else if (
+				!modelLoaderConstructor &&
+				hasFileExtension(file, LAS_FILE_EXTENSIONS)
+			) {
+				modelLoaderConstructor = NonBlockingLASLoader;
 				modelFile = file;
 			} else if (
 				!textureLoader &&

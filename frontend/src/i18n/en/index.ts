@@ -45,6 +45,8 @@ const en: BaseTranslation = {
 	NO_MODEL_DATA_PREVIEWS_MSG: "No files selected",
 	NO_MODEL_TYPE_MSG: "No model type selected",
 	NO_TEXTURE_MSG: "No texture file selected",
+	LAS_REQUIRES_POINT_CLOUD_MSG:
+		"LAS/LAZ files can only be uploaded as a point cloud",
 	UNNAMED_MODEL_DATA_PREVIEW_MSG: "Unnamed files",
 
 	TRIANGLE_MESH: "mesh",
@@ -110,6 +112,7 @@ const en: BaseTranslation = {
 	SETTING_UP_ANNOTATOR: "setting up annotator...",
 	SETTING_UP_ANNOTATOR_ABORTED: "setting up annotator... aborted",
 	FINISHED_SETUP: "finished setup",
+	SETUP_FAILED: "Could not open the model:",
 
 	// Setup Errors
 

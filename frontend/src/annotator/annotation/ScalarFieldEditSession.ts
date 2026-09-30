@@ -1,4 +1,3 @@
-import { type BufferAttribute } from "three";
 import { categoricalColor } from "~annotator/scalarFields/ScalarFieldColorMap";
 import { type Scene } from "~annotator/scene/Scene";
 import { type PointCloud } from "~annotator/scene/model/PointCloud";
@@ -24,7 +23,7 @@ import { HybridUndoManager } from "./undo/HybridUndoManager";
  * Classification labels - just pointed at this field's data instead.
  *
  * Painted values are written directly into the scalar field's live
- * `BufferAttribute` as soon as a stroke completes; there is no separate
+ * values array as soon as a stroke completes; there is no separate
  * "commit"/"flush" step.
  */
 export class ScalarFieldEditSession implements Destroyable {
@@ -33,7 +32,8 @@ export class ScalarFieldEditSession implements Destroyable {
 	public readonly annotationManager: AnnotationManager;
 	public readonly undoManager: HybridUndoManager;
 
-	private readonly fieldAttribute: BufferAttribute;
+	/** the field's live values, shared with the model */
+	private readonly fieldValues: Float32Array;
 	private readonly visualizer: PointCloudAnnotationVisualizer;
 	private readonly unsubscribeAnnotate: () => void;
 
@@ -46,11 +46,8 @@ export class ScalarFieldEditSession implements Destroyable {
 	constructor(scene: Scene<PointCloud>, field: ScalarFieldInfo) {
 		this.fieldName = field.name;
 
-		const geometry = scene.getModel().getPoints().geometry;
-		this.fieldAttribute = geometry.getAttribute(
-			field.attributeKey
-		) as BufferAttribute;
-		const values = this.fieldAttribute.array as Float32Array;
+		this.fieldValues = scene.getModel().getScalarFieldValues(field.name);
+		const values = this.fieldValues;
 
 		const uniqueValues =
 			field.uniqueValues ??
@@ -166,15 +163,13 @@ export class ScalarFieldEditSession implements Destroyable {
 	}
 
 	private flush(indices: ArrayLike<number>): void {
-		const values = this.fieldAttribute.array as Float32Array;
+		const values = this.fieldValues;
 		const lut = this.annotationManager.getAnnotationDataLUT();
 
 		for (let i = 0; i < indices.length; i++) {
 			const index = indices[i];
 			values[index] = this.classToValue.get(lut[index])!;
 		}
-
-		this.fieldAttribute.needsUpdate = true;
 	}
 
 	public destroy(): void {
