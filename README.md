@@ -126,6 +126,8 @@ ANNOTATOR_3D_API_BASE_URL=http://127.0.0.1:8000/api
 
 The frontend dev server runs at **http://localhost:3000**.
 
+> **Windows shortcut:** once both setups above have been done at least once, you can start both servers at once (each in its own window) with `.\dev.ps1` from the repository root, in PowerShell. Pass `-Install` (`.\dev.ps1 -Install`) to also run `pnpm install` first, e.g. after pulling changes that touched `frontend/package.json`.
+
 ## 3. Open the app
 
 With both servers running, open **http://localhost:3000** in Chrome and log in (see accounts below), or register a new user.
